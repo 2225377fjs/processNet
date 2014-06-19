@@ -1,10 +1,13 @@
+#ifndef __PROCESS_H
+#define __PROCESS_H
+
 #include <set>
 #include <map>
 #include <string>
 #include <iostream>
-extern "C" {
-#ifndef __PROCESS_H
-#define __PROCESS_H
+
+
+
 
 #include <pthread.h>
 
@@ -66,7 +69,7 @@ struct dpargs {
 
 class Process{
 public:
-	Process(long pid) {
+	Process(int pid) {
 		this->pid = pid;
 		this->inodes = getProcessSocketInode(this->pid);
 	}
@@ -84,13 +87,33 @@ public:
 			return true;
 		}
 	}
+	void refershInodes() {
+		if (this->inodes != NULL) {
+			std::set<long>::iterator it = this->inodes->begin();
+			while (it != this->inodes->end()) {
+				this->inodes->erase(it);
+				it++;
+			}
+			this->inodes->clear();
+			delete this->inodes;
+			this->inodes = NULL;
+		}
+		this->inodes = getProcessSocketInode(this->pid);
+	}
 
-private:
-	long pid;
-	std::set<long>* inodes;
+	double sudu = 0;
+	int len = 0;
+	int pid;
+	std::set<long>* inodes = NULL;
+	
+	
+
+	
 };
 
 
-#endif
 
-}
+
+
+
+#endif

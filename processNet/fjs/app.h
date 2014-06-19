@@ -1,9 +1,11 @@
+#ifndef __APP_H
+#define __APP_H
 #include <iostream>
 #include <map>
 #include <set>
-extern "C" {
-#ifndef __APP_H
-#define __APP_H
+#include <vector>
+
+
 
 #include <Python.h>
 
@@ -58,6 +60,8 @@ extern "C" {
 #define HASHKEYSIZE 92
 
 
+extern pthread_mutex_t pmutex;
+
 
 void* wakeUp(void *arg);
 
@@ -65,23 +69,35 @@ void processCallBack(u_char *userData, const  pcap_pkthdr *header, const u_char 
 
 double doProcess(int pid, int time);
 
+void* loop(void *arg);
+
+
 
 
 
 class App{
 public:
-	App(long pid, int time) {
-		this->process = new Process(pid);
+	App(int time) {
 		this->con = new Connection();
 		this->time = time;
-		this->pid = pid;
 		this->len = 0;
+		pthread_mutex_init(&pmutex, NULL);
 	}
 
 	~App() {
-		delete this->process;
+		size_t size = this->processs.size();
+		for (int i = 0; i< size; i++) {
+			Process *now = this->processs[i];
+			delete now;
+		}
 		delete this->con;
 	}
+
+	void refreshConnection() {
+		delete this->con;
+		this->con = new Connection();
+	}
+
 
 	void dispatch() {
 		char errbuff[PCAP_ERRBUF_SIZE];
@@ -90,8 +106,36 @@ public:
 		this->handle = pcap_open_live(dev, BUFSIZ, 0, 1000, errbuff);
 
 		this->linkType = pcap_datalink(this->handle);
-		int err = pthread_create(&this->ptid, NULL, wakeUp, this);
-		pcap_loop(this->handle, -1, processCallBack, (u_char*)this);
+
+		int err = pthread_create(&this->ptid, NULL, loop, this);
+
+	}
+
+	void addProcess(Process *pro) {
+		size_t size = this->processs.size();
+		for (int i = 0; i< size; i++) {
+			Process *now = this->processs[i];
+			if (now->pid == pro->pid) {
+				delete pro;
+				return;
+			}
+		}
+		this->processs.push_back(pro);
+	}
+
+	void removeProcess(int pid) {
+		std::vector<Process*>::iterator it = this->processs.begin();
+		while (it != this->processs.end()) {
+			Process *pro = *it;
+			if (pro->pid == pid) {
+				it = this->processs.erase(it);
+				delete pro;
+				break;
+			} else {
+				it++;
+			}
+		}
+		
 	}
 
 	void dp_parse_ethernet (const pcap_pkthdr * header, const u_char * packet){
@@ -137,9 +181,20 @@ public:
 		struct tcphdr * tcp = (struct tcphdr *) packet;
 
 		unsigned long inode = this->con->getConnectionInoe(this->info.ip_src, ntohs(tcp->source), this->info.ip_dst, ntohs(tcp->dest));
+		pthread_mutex_lock(&pmutex);
+		size_t size = this->processs.size();
+		for (int i = 0; i< size; i++) {
+			Process *now = this->processs[i];
+			if (now->hasInode(inode)) {
+				now->len += header->len;
+				break;
+			}
+		}
+		pthread_mutex_unlock(&pmutex);
+		/*
 		if (this->process->hasInode(inode)) {
 			this->len += header->len;
-		}
+		}*/
 	}
 
 	pcap_t *handle;
@@ -149,16 +204,19 @@ public:
 	pthread_t ptid;
 	long pid;
 	int len;
+	std::vector<Process*> processs;
 
 private:
 	Process *process;
 	Connection *con;
 	
 	
+	
 };
 
 
 
-#endif
 
-}
+
+
+#endif

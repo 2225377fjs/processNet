@@ -1,5 +1,5 @@
 #include "conninode.h"
-extern "C" {
+
 
 
 
@@ -147,7 +147,4 @@ std::map <std::string, unsigned long>* refreshconninode ()
 
 	//if (DEBUG)
 	//	reviewUnknown();
-
-}
-
 }

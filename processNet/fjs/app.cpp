@@ -1,15 +1,63 @@
 
 #include "app.h"
 
-extern "C" {
 
 
+pthread_mutex_t pmutex = PTHREAD_MUTEX_INITIALIZER;
 
 void* wakeUp(void *arg){
+	pthread_detach(pthread_self());
 	App *app = (App*)arg;
 	sleep(app->time);
 	pcap_breakloop(app->handle);
 	return ((void*)0);
+}
+
+
+std::vector<int> res;
+
+void* loop(void *arg){
+	App *app = (App*)arg;
+	timeval begin, end;
+	pthread_t ptid;
+	while (true) {
+		gettimeofday(&begin, NULL);
+
+
+
+		int err = pthread_create(&ptid, NULL, wakeUp, app);
+
+		pcap_loop(app->handle, -1, processCallBack, (u_char*)app);
+		size_t size = app->processs.size();
+		
+		gettimeofday(&end, NULL);
+
+		double sec = end.tv_sec - begin.tv_sec;
+		sec += ((double)(end.tv_usec - begin.tv_usec)) / 1000000;
+
+
+		pthread_mutex_lock(&pmutex);
+		for (int i = 0; i < size; i++) {
+			Process *now = app->processs[i];
+			double all = (double)now->len;
+			now->len = 0;
+			double su = all / sec / 1000;
+			now->sudu = su;
+			now->refershInodes();
+			if (now->inodes == NULL) {
+				res.push_back(now->pid);
+			}
+		}
+		pthread_mutex_unlock(&pmutex);
+
+
+		for (int i = 0; i < res.size(); i++) {
+			int pid = res[i];
+			app->removeProcess(pid);
+		}
+		res.clear();
+		app->refreshConnection();
+	}
 }
 
 
@@ -40,7 +88,7 @@ void processCallBack(u_char *userData, const  pcap_pkthdr *header, const u_char 
 
 double doProcess(int pid, int time){
 
-
+/*
 	timeval begin, end;
 	gettimeofday(&begin, NULL);
 
@@ -58,7 +106,8 @@ double doProcess(int pid, int time){
 
 
 	printf("%.2f KB/S\n", su);
-	return su;
+	return su;*/
+	return 0;
 }
 
 
@@ -114,4 +163,3 @@ int main(){
 }*/
 
 
-}

@@ -42,29 +42,86 @@ PyMODINIT_FUNC init_fn (void)
  */
  #include "app.h"
 
-extern "C" {
 #include <Python.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/resource.h>
+#include "_fn.h"
 
 
-
+App *app = NULL;
 
 static PyObject* testProcess(PyObject *self, PyObject *args)
 {
     //把输入的Python对象转换为C/C++能识别的数据
-    int pid, time;
-    if(!PyArg_ParseTuple(args, "ii", &pid, &time))
+    int pid;
+    if(!PyArg_ParseTuple(args, "i", &pid))
         return NULL;
     //调用C/C++函数，得到结果
-    double out = doProcess(pid, time);
+    double out = -1;
+    pthread_mutex_lock(&pmutex);
+    size_t size = app->processs.size();
+    for (int i = 0; i< size; i++) {
+        Process *now = app->processs[i];
+        if (now->pid == pid) {
+            out = now->sudu;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&pmutex);
     //把得到的结果包装成Python对象，并返回
     PyObject *parm = (PyObject*)Py_BuildValue("d", out);
+    return parm;
+
+}
+
+static PyObject* removeProcess(PyObject *self, PyObject *args)
+{
+    //把输入的Python对象转换为C/C++能识别的数据
+    int pid;
+    if(!PyArg_ParseTuple(args, "i", &pid))
+        return NULL;
+    //调用C/C++函数，得到结果
+    pthread_mutex_lock(&pmutex);
+    app->removeProcess(pid);
+    pthread_mutex_unlock(&pmutex);
+
+
+    //把得到的结果包装成Python对象，并返回
+    PyObject *parm = (PyObject*)Py_BuildValue("d", 0);
 
     return parm;
 
 }
+
+
+static PyObject* addProcess(PyObject *self, PyObject *args)
+{
+    //把输入的Python对象转换为C/C++能识别的数据
+    int pid;
+    if(!PyArg_ParseTuple(args, "i", &pid))
+        return NULL;
+    //调用C/C++函数，得到结果
+    Process *pro = new Process(pid);
+    PyObject *parm = NULL;
+    if (pro->inodes == NULL) {
+        delete pro;
+        parm = (PyObject*)Py_BuildValue("d", -1);
+    } else {
+        pthread_mutex_lock(&pmutex);
+        app->addProcess(pro);
+        pthread_mutex_unlock(&pmutex);
+        parm = (PyObject*)Py_BuildValue("d", 0);
+    }
+    
+
+
+    //把得到的结果包装成Python对象，并返回
+
+    return parm;
+
+}
+
 
 
 
@@ -78,7 +135,11 @@ static PyObject* testProcess(PyObject *self, PyObject *args)
 static PyMethodDef
 PsutilMethods[] =
 {
+     {"removeProcess", removeProcess, METH_VARARGS,
+     "Return process priority"},
      {"testProcess", testProcess, METH_VARARGS,
+     "Return process priority"},
+     {"addProcess", addProcess, METH_VARARGS,
      "Return process priority"},
     {NULL, NULL, 0, NULL}
 };
@@ -129,6 +190,7 @@ PyMODINIT_FUNC PyInit__fn(void)
 #else
 #define INITERROR return
 
+
 void init_fn(void)
 #endif
 {
@@ -140,8 +202,10 @@ void init_fn(void)
     if (module == NULL) {
         INITERROR;
     }
+    // 
+    app = new App(10);
+    app->dispatch();
 #if PY_MAJOR_VERSION >= 3
     return module;
 #endif
-}
 }
